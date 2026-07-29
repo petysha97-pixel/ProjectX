@@ -31,6 +31,29 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func SaveMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Разрешаем фронтенду доступ
+		w.Header().Set("Access-Control-Allow-Origin", "*") //* - разрешен доступ со всех доменов
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method != http.MethodPost {
+			w.WriteHeader(405)
+			return
+		}
+
+		// Если браузер делает предварительную проверку (Preflight request)
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Передаем запрос дальше в наши http.HandleFunc
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 
 	db, err := sql.Open("sqlite", "../db.db")
@@ -45,24 +68,23 @@ func main() {
 	models.UserDB = db
 	fmt.Println("Connected to SQLite")
 
-	http.HandleFunc("/user", handlers.NewUser)
-	http.HandleFunc("/profile/{id}", handlers.GetUser)
-	http.HandleFunc("/search", handlers.SearchUsers)
+	mux := http.NewServeMux()
 
+	mux.Handle("/user", SaveMiddleware(http.HandlerFunc(handlers.NewUser)))
+	mux.HandleFunc("/stack", handlers.GetStacks)
+	mux.HandleFunc("/profile/{id}", handlers.GetUser)
+	mux.HandleFunc("/getusers", handlers.GetAllUser)
+	mux.HandleFunc("/users/searche", handlers.SearcheUsers)
 	// http.HandleFunc("/profile", profile.Profile)
-
-	// 2. Получаем стандартный роутер net/http
-	defaultMux := http.DefaultServeMux
 
 	// 3. Оборачиваем весь роутер в наше CORS Middleware
 	fmt.Println("Сервер запущен: 8080")
-	log.Fatal(http.ListenAndServe(":8080", corsMiddleware(defaultMux)))
+	http.ListenAndServe(":8080", corsMiddleware(mux))
 
 }
 
-
 // ЗАДАЧИ
-// 1. написать 2 функции для уникальности логина и никнейма 
+// 1. написать 2 функции для уникальности логина и никнейма
 // 2. Прописать логику сохранения стека в БД + будем брать из БД и отображать на главной странице
 
 // sql.Open - db, err := sql.Open("sqlite", "app.db") Открывает БД.
