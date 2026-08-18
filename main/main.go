@@ -1,60 +1,34 @@
 package main
 
+
+
+// nota-profile.dev
+// nota-dev.dev
+// n-o-t-a.online
+// n-o-t-a.dev
+// END-NOTA
+// end-nota.dev
+// var Secret = "DF#!_ASDNBUJ@)_JSHDF2"
+
 import (
 	"HOTA/internal/handlers"
 	"HOTA/internal/models"
+	"HOTA/internal/service"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 
+	"github.com/joho/godotenv"
 	_ "modernc.org/sqlite"
 )
 
-// Поэтому на бэкенде обязательно нужно делать проверку прав (авторизацию): имеет ли право текущий вошедший пользователь смотреть данные профиля с этим ID.
-// 1. Создаем функцию Middleware для CORS
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Разрешаем фронтенду доступ
-		w.Header().Set("Access-Control-Allow-Origin", "*") //* - разрешен доступ со всех доменов
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		// Если браузер делает предварительную проверку (Preflight request)
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		// Передаем запрос дальше в наши http.HandleFunc
-		next.ServeHTTP(w, r)
-	})
-}
-
-func SaveMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Разрешаем фронтенду доступ
-		w.Header().Set("Access-Control-Allow-Origin", "*") //* - разрешен доступ со всех доменов
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method != http.MethodPost {
-			w.WriteHeader(405)
-			return
-		}
-
-		// Если браузер делает предварительную проверку (Preflight request)
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		// Передаем запрос дальше в наши http.HandleFunc
-		next.ServeHTTP(w, r)
-	})
-}
-
 func main() {
+	err := godotenv.Load("../.env")
+	if err != nil {
+		log.Fatal("Ошибка в загрузке файла .env")
+	}
+	fmt.Println("Connected файла .env")
 
 	db, err := sql.Open("sqlite", "../db.db")
 	if err != nil {
@@ -70,16 +44,28 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.Handle("/user", SaveMiddleware(http.HandlerFunc(handlers.NewUser)))
+	//регистрация
+	mux.Handle("/user", service.POSTMiddleware(http.HandlerFunc(handlers.NewUser)))
 	mux.HandleFunc("/stack", handlers.GetStacks)
-	mux.HandleFunc("/profile/{id}", handlers.GetUser)
-	mux.HandleFunc("/getusers", handlers.GetAllUser)
-	mux.HandleFunc("/users/searche", handlers.SearcheUsers)
-	// http.HandleFunc("/profile", profile.Profile)
+
+	//Авторизация 
+	mux.Handle("/user/auth", service.POSTMiddleware(http.HandlerFunc(handlers.Auth)))
+
+	//Главный профиль
+	mux.Handle("/profile", service.JWTMiddleware(http.HandlerFunc((handlers.GetUser))))
+
+	//CRUD
+	mux.Handle("/user/update", service.JWTMiddleware(http.HandlerFunc(handlers.UpdateUser)))
+    mux.Handle("/user/password", service.JWTMiddleware(http.HandlerFunc(handlers.UpdatePassword)))
+	mux.Handle("/user/email", service.JWTMiddleware(http.HandlerFunc(handlers.UpdateEmail)))
+	mux.Handle("/user/delete", service.JWTMiddleware(http.HandlerFunc(handlers.DeleteUser)))
+
+	//"Умный поиск"
+	mux.Handle("/users/searche", service.GETMiddleware(http.HandlerFunc(handlers.SearcheUsers)))
 
 	// 3. Оборачиваем весь роутер в наше CORS Middleware
 	fmt.Println("Сервер запущен: 8080")
-	http.ListenAndServe(":8080", corsMiddleware(mux))
+	http.ListenAndServe(":8080", service.CORSMiddleware(mux))
 
 }
 
