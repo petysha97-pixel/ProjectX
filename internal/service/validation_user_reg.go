@@ -1,4 +1,4 @@
-package repositories
+package service
 
 import (
 	"HOTA/internal/models"
@@ -10,14 +10,12 @@ import (
 	"github.com/go-ozzo/ozzo-validation/v4/is"
 )
 
-var User models.User
-
 // валидация полей при регистрации
 func ValidateStruct(User models.User) error {
 	return validation.ValidateStruct(&User,
 
-		//Логин (мыло @ + домен)
-		validation.Field(&User.Login, validation.Required, is.Email, validation.Length(1, 30), validation.By(UNIK_login)),
+		//Почта (мыло @ + домен)
+		validation.Field(&User.Email, validation.Required, is.Email, validation.Length(1, 30), validation.By(UNIK_email)),
 
 		//Пароль (P-p 1-9 1(!-%))
 		validation.Field(&User.Password, validation.Required, validation.Length(8, 30), validation.By(ValidatePasswors)),
@@ -31,8 +29,7 @@ func ValidateStruct(User models.User) error {
 
 		// Стек обязателен. Мы проверяем каждый элемент массива (каждую строку технологии)
 		validation.Field(&User.Stack, validation.Required, validation.Length(1, 6), validation.Each(
-			validation.Required,
-			validation.Length(1, 10), // Каждая технология от 1 до 10 символов
+			validation.Required, // Минимум 1 стек
 		)),
 	)
 }
@@ -53,10 +50,6 @@ func ValidatePasswors(password any) error {
 		return errors.New("Пароль должен быть строкой")
 	}
 
-	if !allowedCharsPattern.MatchString(pass) {
-		return errors.New("пароль должен содержать: спецсимвол (!@#$%^&*()-+=)")
-	}
-
 	if !hasUpperPattern.MatchString(pass) {
 		return errors.New("пароль должен содержать: заглавнй буквы")
 	}
@@ -67,7 +60,7 @@ func ValidatePasswors(password any) error {
 		return errors.New("пароль должен содержать: хотя бы 1 цифру ")
 	}
 	if !hasSpecialPattern.MatchString(pass) {
-		return errors.New("пароль должен содержать: спецсимвол (!@#$%^&*()-+=)")
+		return errors.New("пароль должен содержать хотя бы один спецсимвол (!@#$%^&*()-+=)")
 	}
 
 	return nil
@@ -98,17 +91,17 @@ func UNIK_Nickname(value any) error {
 	return errors.New("ник уже занят")
 }
 
-// Уникальность Логина
-func UNIK_login(login any) error {
+// Уникальность Логина (мыло)
+func UNIK_email(email any) error {
 
-	log, ok := login.(string)
+	log, ok := email.(string)
 	if !ok {
-		return errors.New("Логин должен быть строкой")
+		return errors.New("почта должен быть строкой")
 	}
 
 	var count int
 
-	query := `SELECT COUNT(1) FROM users WHERE Login = ? LIMIT 1`
+	query := `SELECT COUNT(1) FROM users WHERE Email = ? LIMIT 1`
 
 	err := models.UserDB.QueryRow(query, log).Scan(&count)
 
@@ -122,7 +115,7 @@ func UNIK_login(login any) error {
 	}
 
 	if count > 0 {
-		return errors.New("ник уже занят")
+		return errors.New("емаил уже занят")
 	}
 
 	return nil

@@ -13,3 +13,5 @@ type RegistrationResponseError struct {
 	Error        error `json:"error,omitempty"`
 	ID           int    `json:"id,omitempty"`
 }
+
+

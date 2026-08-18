@@ -3,7 +3,9 @@ package handlers
 import (
 	"HOTA/internal/models"
 	"HOTA/internal/repositories"
-	"crypto/md5"
+	"HOTA/internal/service"
+
+	// "crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,78 +14,79 @@ import (
 
 // регистрация +валидация пользователей через POST запросы
 func NewUser(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" {
-		w.WriteHeader(405)
+
+	var user models.User
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "Не верные данные 1 ")
 		return
 	}
 
-	if r.Method == "POST" {
-		var user models.User
+	err = json.Unmarshal(body, &user)
+	if err != nil {
 
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, "Не верные данные 1 ")
-			return
-		}
-
-		err = json.Unmarshal(body, &user)
-		if err != nil {
-
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, "Не верные данные 2")
-			return
-		}
-
-		//валидиреум пользователя
-
-		errs := repositories.ValidateStruct(user)
-		fmt.Println(errs)
-		if errs != nil {
-			status := models.RegistrationResponseError{
-				StatusGlobal: "Регистрация не успешна",
-				Error:        errs,
-			}
-			data, _ := json.MarshalIndent(&status,
-				" ",
-				" ")
-
-			w.Write(data)
-			return
-		}
-
-		//После валидации хешируем пооль + солим
-		passwordHash := md5.Sum([]byte(user.Password + "salt"))
-		user.Password = fmt.Sprintf("%x", passwordHash)
-
-		user, err = repositories.AppendUser(user) //сохраняем пользовтеля в БД
-		fmt.Println(err)
-		if err != nil {
-			status := models.RegistrationResponseError{
-				StatusGlobal: "Регистрация не успешна",
-				Error:        err,
-			}
-
-			data, _ := json.MarshalIndent(&status,
-				" ",
-				" ")
-
-			w.Write(data)
-			return
-		} else {
-			status := models.RegistrationResponseError{
-				StatusGlobal: "Регистрация успешна",
-				ID:           user.ID,
-			}
-			data, _ := json.MarshalIndent(&status,
-				" ",
-				" ")
-
-			w.Write(data)
-			fmt.Println(string(data))
-		}
-
-		fmt.Println(user)
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "Не верные данные 2")
+		return
 	}
+	fmt.Println(user)
+
+	//валидиреум пользователя
+	errs := service.ValidateStruct(user)
+	fmt.Println(errs)
+	if errs != nil {
+		http.Error(w, "Ошибка валидации", 400)
+		status := models.RegistrationResponseError{
+			StatusGlobal: "Регистрация не успешна",
+			Error:        errs,
+		}
+		data, _ := json.MarshalIndent(&status,
+			" ",
+			" ")
+
+		w.Write(data)
+		return
+	}
+	//хешируем + солим пароль
+	newpassword, err := service.Hash_password(user.Password)
+	if err != nil {
+		fmt.Printf("Ошибка хеширования пароля: %v", err)
+		statys := models.RegistrationResponseError{
+			StatusGlobal: "Ошибка хеширования пароля",
+			Error:        err,
+		}
+
+		w.WriteHeader(http.StatusBadRequest)
+		w.Header().Set("Context-Type", "application/json")
+		json.NewEncoder(w).Encode(statys)
+		return
+
+	}
+	user.Password = newpassword
+
+	fmt.Println(user)
+	user, err = repositories.AppendUser(user) //сохраняем пользовтеля в БД
+	if err != nil {
+		status := models.RegistrationResponseError{
+			StatusGlobal: "Регистрация не успешна",
+			Error:        err,
+		}
+		w.Header().Set("Context-Type", "application/json")
+		json.NewEncoder(w).Encode(status)
+	}
+
+	jwtDTO, err := service.CreatJWT(user.ID)
+	if err != nil {
+		w.WriteHeader(401)
+		fmt.Printf("Ошибка создания токена %v", err)
+		http.Error(w, "Ошибка создания токена", 400)
+		return
+	}
+
+	fmt.Println(jwtDTO)
+	w.Header().Set("Context-Type", "application/json")
+	json.NewEncoder(w).Encode(jwtDTO)
 }

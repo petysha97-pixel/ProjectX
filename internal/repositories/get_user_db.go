@@ -7,9 +7,9 @@ import (
 )
 
 // ​​получение пользователя по ИД для отображения данных на главном сайте
-func Get_userdb(id int) models.User {
+func Get_userdb(id int) models.UserResponse{
 
-	var user models.User
+	var user models.UserResponse
 	qwery := "SELECT id, Nickname, Rolle FROM users WHERE id = ?"
 
 	err := models.UserDB.QueryRow(qwery, id).Scan(
@@ -32,4 +32,36 @@ func Get_userdb(id int) models.User {
 	}
 
 	return user
+}
+
+
+
+//даостает стеки пользователя для ответа на фронт
+func GetStacksByUserID(id int) ([]models.Stack, error){
+    
+	
+	var stacks []models.Stack
+	
+	qwer := `SELECT stacks.id, stacks.name FROM user_stacks 
+	INNER JOIN stacks ON user_stacks.stack_id = stacks.id
+	WHERE user_stacks.user_id = ?`
+
+	rows, err := models.UserDB.Query(qwer, id)
+    if err != nil{
+		return nil, fmt.Errorf("ошибка выполнения запроса на получения стека: %w", err)
+	}
+	defer rows.Close()
+	
+	
+	for rows.Next() {
+  	var stack models.Stack
+	err := rows.Scan(&stack.ID, &stack.Name)
+    if err != nil {
+		return nil, fmt.Errorf("ошибка записи стка в структуру: %w", err)
+	}
+
+	stacks = append(stacks, stack)
+	}
+
+	return stacks, nil
 }
